@@ -5,6 +5,7 @@ const cors = require('cors')
 const morgan = require('morgan')
 const baseUrl = '/api/persons'
 const Person = require('./models/person')
+const middleware = require('./utils/middleware')
 
 
 morgan.token('body', (req) => {
@@ -13,9 +14,9 @@ morgan.token('body', (req) => {
 })
 
 app.use(cors())
+app.use(express.static('build'))
 app.use(express.json())
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'))
-app.use(express.static('build'))
 
 app.get('/info', (req, res) => {
     Person.find({}).then(persons => {
@@ -33,7 +34,7 @@ app.get(baseUrl, (req, res) => {
         })
 })
 
-app.get(`${baseUrl}/:id`, (req, res) => {
+app.get(`${baseUrl}/:id`, (req, res, next) => {
     Person.findById(req.params.id)
         .then(person => {
             if (person) {
@@ -45,31 +46,17 @@ app.get(`${baseUrl}/:id`, (req, res) => {
         .catch(error => next(error))
 })
 
-app.delete(`${baseUrl}/:id`, (req, res) => {
-    const id = Number(req.params.id)
-    const person = persons.find(p => p.id === id)
-    if (person) {
-        persons = persons.filter(p => p.id !== id)
-        res.status(204).end()
-    } else {
-        res.status(404).end()
-    }
+app.delete(`${baseUrl}/:id`, (req, res, next) => {
+    Person.findByIdAndRemove(req.params.id)
+        .then(deleted => {
+            res.status(204).end()
+        })
+        .catch(error => next(error))
 })
 
 app.post(baseUrl, (req, res, next) => {
     const body = req.body
 
-    if (!body.name) {
-        return res.status(400).json({ error: 'name missing' })
-    }
-    if (!body.number) {
-        return res.status(400).json({ error: 'number missing' })
-    }
-    /*  
-     if (persons.find(p => p.name === body.name)) {
-         return res.status(400).json({ error: 'name must be unique' })
-     }
-    */
     const person = new Person({
         name: body.name,
         number: body.number
@@ -83,5 +70,23 @@ app.post(baseUrl, (req, res, next) => {
         })
         .catch(error => next(error))
 })
+
+app.put(`${baseUrl}/:id`, (req, res, next) => {
+    const body = req.body
+
+    const person = {
+        name: body.name,
+        number: body.number
+    }
+
+    Person.findByIdAndUpdate(req.params.id, person, { new: true })
+        .then(updatedPerson => {
+            res.json(updatedPerson.toJSON())
+        })
+        .catch(error => next(error))
+})
+
+app.use(middleware.unknownEndpoint)
+app.use(middleware.errorHandler)
 
 module.exports = app
